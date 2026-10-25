@@ -95,6 +95,21 @@ pub fn held_claim_followups(
 ) -> Vec<String> {
     use crate::util::quote_arg;
     let mut lines = Vec::new();
+    // Size first, so the new pane's program starts at the size asked for.
+    // resize-window sets window-size manual, which a new-session -x/-y does
+    // not: unset it so an attaching client still sizes the window.
+    if width.is_some() || height.is_some() {
+        let mut line = String::from("resize-window");
+        if let Some(w) = width {
+            line.push_str(&format!(" -x {}", w));
+        }
+        if let Some(h) = height {
+            line.push_str(&format!(" -y {}", h));
+        }
+        line.push('\n');
+        lines.push(line);
+        lines.push("set-option -wu window-size\n".to_string());
+    }
     let command: Option<String> = match (raw_cmd, initial_cmd) {
         (Some(argv), _) if !argv.is_empty() => {
             Some(argv.iter().map(|a| quote_arg(a)).collect::<Vec<_>>().join(" "))
@@ -110,17 +125,6 @@ pub fn held_claim_followups(
         }
         line.push_str(" -- ");
         line.push_str(&command);
-        line.push('\n');
-        lines.push(line);
-    }
-    if width.is_some() || height.is_some() {
-        let mut line = String::from("resize-window");
-        if let Some(w) = width {
-            line.push_str(&format!(" -x {}", w));
-        }
-        if let Some(h) = height {
-            line.push_str(&format!(" -y {}", h));
-        }
         line.push('\n');
         lines.push(line);
     }

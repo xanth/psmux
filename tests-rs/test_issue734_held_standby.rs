@@ -165,5 +165,8 @@ fn held_claim_followups_cover_what_a_claim_cannot_carry() {
     let raw = held_claim_followups(None, Some(&argv), None, None, None);
     assert_eq!(raw, vec!["respawn-pane -k -- \"node\" \"a b.js\"\n".to_string()]);
     let size = held_claim_followups(None, None, None, Some(120), Some(40));
-    assert_eq!(size, vec!["resize-window -x 120 -y 40\n".to_string()]);
+    assert_eq!(size, vec!["resize-window -x 120 -y 40\n".to_string(), "set-option -wu window-size\n".to_string()]);
+    let both = held_claim_followups(None, Some(&argv), None, Some(80), Some(24));
+    assert_eq!(both[0], "resize-window -x 80 -y 24\n");
+    assert!(both[2].starts_with("respawn-pane -k -- "));
 }
