@@ -1227,6 +1227,44 @@ fn capture_row_text(screen: &vt100::Screen, row: u16, cols: std::ops::Range<u16>
     out
 }
 
+/// capture-pane's per-line flags: `-N` keeps trailing spaces, `-J` joins
+/// wrapped rows. A bare `bool` is `-N` alone.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CaptureOpts {
+    pub preserve_trailing: bool,
+    pub join: bool,
+}
+
+impl From<bool> for CaptureOpts {
+    fn from(preserve_trailing: bool) -> Self {
+        CaptureOpts { preserve_trailing, join: false }
+    }
+}
+
+/// The columns of `row` the program wrote, tmux's `cellused`.
+fn row_used_cols(screen: &vt100::Screen, row: u16, cols: u16) -> u16 {
+    (0..cols)
+        .rev()
+        .find(|&c| screen.cell(row, c).is_some_and(|cell| cell.has_contents() || cell.is_wide_continuation()))
+        .map_or(0, |c| c + 1)
+}
+
+/// Append one row of a plain capture. With `-J` the row is the cells it
+/// used, spaces kept, and a wrapped row gets no newline, so the next row
+/// continues its line (tmux cmd-capture-pane.c).
+fn push_capture_line(text: &mut String, screen: &vt100::Screen, row: u16, cols: u16, opts: CaptureOpts) {
+    if opts.join {
+        text.push_str(&capture_row_text(screen, row, 0..row_used_cols(screen, row, cols)));
+        if screen.row_wrapped(row) {
+            return;
+        }
+    } else {
+        let line = capture_row_text(screen, row, 0..cols);
+        text.push_str(if opts.preserve_trailing { &line } else { line.trim_end() });
+    }
+    text.push('\n');
+}
+
 /// Resolve the (window index, tree path) a capture should read.
 ///
 /// An explicit `-t %N` pane id wins and is searched across every window
@@ -1244,7 +1282,8 @@ fn capture_target(app: &AppState, pane_id: Option<usize>) -> (usize, Vec<usize>)
     (app.active_idx, app.windows[app.active_idx].active_path.clone())
 }
 
-pub fn capture_active_pane_text(app: &mut AppState, pane_id: Option<usize>, preserve_trailing: bool) -> io::Result<Option<String>> {
+pub fn capture_active_pane_text(app: &mut AppState, pane_id: Option<usize>, opts: impl Into<CaptureOpts>) -> io::Result<Option<String>> {
+    let opts = opts.into();
     let (win_idx, path) = capture_target(app, pane_id);
     let win = &mut app.windows[win_idx];
     let p = match active_pane_mut(&mut win.root, &path) { Some(p) => p, None => return Ok(None) };
@@ -1252,15 +1291,7 @@ pub fn capture_active_pane_text(app: &mut AppState, pane_id: Option<usize>, pres
     let screen = parser.screen();
     let mut text = String::new();
     for r in 0..p.last_rows {
-        let row = capture_row_text(screen, r, 0..p.last_cols);
-        // -N (preserve_trailing) keeps the full row width, trailing spaces
-        // included; without it, trim like tmux does by default.
-        if preserve_trailing {
-            text.push_str(&row);
-        } else {
-            text.push_str(row.trim_end());
-        }
-        text.push('\n');
+        push_capture_line(&mut text, screen, r, p.last_cols, opts);
     }
     // Trim trailing all-empty lines so iTerm2 doesn't advance its cursor
     // past the actual content on initial attach.
@@ -2128,7 +2159,8 @@ pub fn compute_capture_range(s: Option<i32>, e: Option<i32>, last_row: u16) -> (
     (start, end)
 }
 
-pub fn capture_active_pane_range(app: &mut AppState, s: Option<i32>, e: Option<i32>, pane_id: Option<usize>, preserve_trailing: bool) -> io::Result<Option<String>> {
+pub fn capture_active_pane_range(app: &mut AppState, s: Option<i32>, e: Option<i32>, pane_id: Option<usize>, opts: impl Into<CaptureOpts>) -> io::Result<Option<String>> {
+    let opts = opts.into();
     let (win_idx, path) = capture_target(app, pane_id);
     let win = &mut app.windows[win_idx];
     let p = match active_pane_mut(&mut win.root, &path) { Some(p) => p, None => return Ok(None) };
@@ -2144,14 +2176,7 @@ pub fn capture_active_pane_range(app: &mut AppState, s: Option<i32>, e: Option<i
         let screen = parser.screen();
         let mut text = String::new();
         for r in start..=end {
-            let row = capture_row_text(screen, r, 0..cols);
-            // -N keeps trailing spaces per row; default trims them.
-            if preserve_trailing {
-                text.push_str(&row);
-            } else {
-                text.push_str(row.trim_end());
-            }
-            text.push('\n');
+            push_capture_line(&mut text, screen, r, cols, opts);
         }
         // An explicit range (-S/-E) is honored line for line, matching tmux:
         // every requested row is emitted, including trailing blank rows inside
@@ -2205,14 +2230,7 @@ pub fn capture_active_pane_range(app: &mut AppState, s: Option<i32>, e: Option<i
 
         for aline in read_start..=read_end {
             let r = (aline + actual_sb) as u16;
-            let row = capture_row_text(parser.screen(), r, 0..cols);
-            // -N keeps trailing spaces per row; default trims them.
-            if preserve_trailing {
-                text.push_str(&row);
-            } else {
-                text.push_str(row.trim_end());
-            }
-            text.push('\n');
+            push_capture_line(&mut text, parser.screen(), r, cols, opts);
         }
         next_abs = read_end + 1;
     }
@@ -2243,7 +2261,8 @@ pub fn capture_active_pane_range(app: &mut AppState, s: Option<i32>, e: Option<i
 /// (`tty_check_fg` and friends) substitutes the palette.  So a capture reports
 /// the indexed colour the pane actually wrote, and a caller that wants the
 /// resolved RGB reads the rendered frame instead.
-pub fn capture_active_pane_styled(app: &mut AppState, s: Option<i32>, e: Option<i32>, pane_id: Option<usize>, preserve_trailing: bool) -> io::Result<Option<String>> {
+pub fn capture_active_pane_styled(app: &mut AppState, s: Option<i32>, e: Option<i32>, pane_id: Option<usize>, opts: impl Into<CaptureOpts>) -> io::Result<Option<String>> {
+    let CaptureOpts { preserve_trailing, join } = opts.into();
     let (win_idx, path) = capture_target(app, pane_id);
     let win = &mut app.windows[win_idx];
     let p = match active_pane_mut(&mut win.root, &path) { Some(p) => p, None => return Ok(None) };
@@ -2252,25 +2271,29 @@ pub fn capture_active_pane_styled(app: &mut AppState, s: Option<i32>, e: Option<
     let cols = p.last_cols;
     let last_row = rows.saturating_sub(1) as i32;
 
-    // SGR delta tracker state (persists across scrollback batches)
-    let mut prev_fg: Option<vt100::Color> = None;
-    let mut prev_bg: Option<vt100::Color> = None;
+    // SGR delta tracker state (persists across scrollback batches). It starts
+    // at the default style, so default cells carry no codes, as in tmux.
+    let mut prev_fg: Option<vt100::Color> = Some(vt100::Color::Default);
+    let mut prev_bg: Option<vt100::Color> = Some(vt100::Color::Default);
     let mut prev_bold = false;
     let mut prev_dim = false;
     let mut prev_italic = false;
     let mut prev_underline = false;
     let mut prev_ul_style = vt100::UnderlineStyle::None;
-    let mut prev_ulcolor: Option<vt100::Color> = None;
+    let mut prev_ulcolor: Option<vt100::Color> = Some(vt100::Color::Default);
     let mut prev_blink = false;
     let mut prev_inverse = false;
     let mut prev_hidden = false;
     let mut prev_strikethrough = false;
+    let mut any_style_active = false;
 
     // Helper closure: render one screen row with SGR tracking
     let mut render_styled_row = |screen: &vt100::Screen, r: u16, text: &mut String| {
         let mut row_chars: Vec<String> = Vec::new();
         let mut row_sgr: Vec<Option<String>> = Vec::new();
-        let mut any_style_active = false;
+        // -J keeps exactly the cells the row used, as push_capture_line does.
+        let used = if join { row_used_cols(screen, r, cols) } else { cols };
+        let used_entries = (0..used).filter(|&c| !screen.cell(r, c).is_some_and(|cell| cell.is_wide_continuation())).count();
         for c in 0..cols {
             if let Some(cell) = screen.cell(r, c) {
                 // Second half of a wide glyph: the leading half already emitted
@@ -2375,7 +2398,9 @@ pub fn capture_active_pane_styled(app: &mut AppState, s: Option<i32>, e: Option<
         // spaces (e.g. a TUI's background fill painted to end-of-line) keep
         // their SGR when the capture is replayed. Without -N, trim after the
         // last non-whitespace cell like tmux does by default.
-        let trim_end = if preserve_trailing {
+        let trim_end = if join {
+            used_entries
+        } else if preserve_trailing {
             row_chars.len()
         } else {
             match row_chars.iter().rposition(|s| !s.is_empty() && s.trim() != "") { Some(pos) => pos + 1, None => 0 }
@@ -2384,10 +2409,14 @@ pub fn capture_active_pane_styled(app: &mut AppState, s: Option<i32>, e: Option<
             if let Some(ref sgr) = row_sgr[c] { text.push_str(sgr); }
             text.push_str(&row_chars[c]);
         }
+        // A wrapped row runs on into the next one, its style with it.
+        if join && screen.row_wrapped(r) {
+            return;
+        }
         if any_style_active {
             text.push_str("\x1b[0m");
-            prev_fg = None;
-            prev_bg = None;
+            prev_fg = Some(vt100::Color::Default);
+            prev_bg = Some(vt100::Color::Default);
             prev_bold = false;
             prev_dim = false;
             prev_italic = false;
@@ -2397,6 +2426,7 @@ pub fn capture_active_pane_styled(app: &mut AppState, s: Option<i32>, e: Option<
             prev_blink = false;
             prev_inverse = false;
             prev_hidden = false;
+            any_style_active = false;
         }
         text.push('\n');
     };

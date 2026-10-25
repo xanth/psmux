@@ -593,6 +593,14 @@ pub fn prune_exited(n: Node, remain_on_exit: bool, kill_descendants: bool) -> (O
                     if keep {
                         p.dead = true;
                         p.dead_status = Some(status.exit_code());
+                        // tmux's remain-on-exit-format default, on a new
+                        // bottom line (server-fn.c server_destroy_pane).
+                        if let Ok(mut parser) = p.live_parser().lock() {
+                            let rows = parser.screen().size().0;
+                            let when = chrono::Local::now().format("%a %b %e %H:%M:%S %Y");
+                            let footer = format!("\x1b[0m\x1b[r\x1b[{};1H\nPane is dead (status {}, {})", rows, status.exit_code(), when);
+                            parser.process(footer.as_bytes());
+                        }
                         (Some(Node::Leaf(p)), 1)
                     } else {
                         // Shell exited on its own: sweep any orphaned descendants

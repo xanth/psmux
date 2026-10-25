@@ -307,3 +307,43 @@ fn none_target_captures_active_pane_as_before() {
     assert!(out.contains("ALPHA-WINDOW"),
         "no -t target must keep capturing the active pane, got: {:?}", out);
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// -J, default-style cells under -e, and the dead pane footer (tmux parity)
+// ════════════════════════════════════════════════════════════════════════
+
+const JOIN: CaptureOpts = CaptureOpts { preserve_trailing: false, join: true };
+
+#[test]
+fn join_rejoins_a_wrapped_line_in_every_capture() {
+    let long = "w".repeat(COLS as usize + 10);
+    let wrapped = format!("{long}\r\nend");
+    let mut app = app_showing(wrapped.as_bytes());
+    let expected = format!("{long}\nend\n");
+    assert_eq!(capture_active_pane_text(&mut app, None, JOIN).unwrap().unwrap(), expected);
+    assert!(capture_active_pane_range(&mut app, Some(-10), None, None, JOIN).unwrap().unwrap().starts_with(&expected));
+    assert!(capture_active_pane_styled(&mut app, Some(-10), None, None, JOIN).unwrap().unwrap().starts_with(&expected));
+    let rows = capture_active_pane_text(&mut app, None, false).unwrap().unwrap();
+    assert_eq!(rows.lines().next(), Some("w".repeat(COLS as usize).as_str()));
+}
+
+#[test]
+fn styled_capture_gives_default_cells_no_codes() {
+    let mut app = app_showing(b"plain\r\n\r\n\x1b[31mred\x1b[0m");
+    let out = capture_active_pane_styled(&mut app, None, None, None, false).unwrap().unwrap();
+    assert_eq!(out, "plain\n\n\x1b[0;31mred\x1b[0m\n");
+}
+
+#[test]
+fn a_kept_dead_pane_shows_tmuxs_footer_on_its_bottom_line() {
+    let pane = make_pane(0, ROWS, 80);
+    pane.term.lock().unwrap().process(b"last words");
+    let (kept, newly_dead) = crate::tree::prune_exited(Node::Leaf(pane), true, false);
+    assert_eq!(newly_dead, 1);
+    let Some(Node::Leaf(pane)) = kept else { panic!("remain-on-exit keeps the pane") };
+    assert_eq!(pane.dead_status, Some(0));
+    let parser = pane.term.lock().unwrap();
+    let bottom = capture_row_text(parser.screen(), ROWS - 1, 0..80);
+    assert!(bottom.starts_with("Pane is dead (status 0, "), "{bottom:?}");
+    assert_eq!(capture_row_text(parser.screen(), ROWS - 2, 0..80).trim_end(), "");
+}

@@ -2414,18 +2414,15 @@ match cmd {
             None => None,
         };
         let (rtx, rrx) = mpsc::channel::<String>();
+        let opts = crate::copy_mode::CaptureOpts { preserve_trailing, join: join_lines };
         if escape_seqs {
-            let _ = tx.send(CtrlReq::CapturePaneStyled(rtx, start, end, capture_pane_id, preserve_trailing));
+            let _ = tx.send(CtrlReq::CapturePaneStyled(rtx, start, end, capture_pane_id, opts));
         } else if s_arg.is_some() || e_arg.is_some() {
-            let _ = tx.send(CtrlReq::CapturePaneRange(rtx, start, end, capture_pane_id, preserve_trailing));
+            let _ = tx.send(CtrlReq::CapturePaneRange(rtx, start, end, capture_pane_id, opts));
         } else {
-            let _ = tx.send(CtrlReq::CapturePane(rtx, capture_pane_id, preserve_trailing));
+            let _ = tx.send(CtrlReq::CapturePane(rtx, capture_pane_id, opts));
         }
-        if let Ok(mut text) = rrx.recv() {
-            if join_lines {
-                // Remove trailing whitespace from each line (join wrapped lines)
-                text = text.lines().map(|l| l.trim_end()).collect::<Vec<_>>().join("\n");
-            }
+        if let Ok(text) = rrx.recv() {
             if print_stdout {
                 // Write text directly — it already ends with \n from capture
                 if persistent {
@@ -5912,12 +5909,13 @@ fn dispatch_control_command(
             // -t %N target: resolved server-side by pane id across all windows.
             let capture_pane_id = if pane_is_id { target_pane } else { None };
             let (rtx, rrx) = mpsc::channel::<String>();
+            let opts = crate::copy_mode::CaptureOpts { preserve_trailing, join: crate::cli::has_short_flag(&args, 'J') };
             if styled {
-                let _ = tx.send(CtrlReq::CapturePaneStyled(rtx, start, end, capture_pane_id, preserve_trailing));
+                let _ = tx.send(CtrlReq::CapturePaneStyled(rtx, start, end, capture_pane_id, opts));
             } else if start.is_some() || end.is_some() {
-                let _ = tx.send(CtrlReq::CapturePaneRange(rtx, start, end, capture_pane_id, preserve_trailing));
+                let _ = tx.send(CtrlReq::CapturePaneRange(rtx, start, end, capture_pane_id, opts));
             } else {
-                let _ = tx.send(CtrlReq::CapturePane(rtx, capture_pane_id, preserve_trailing));
+                let _ = tx.send(CtrlReq::CapturePane(rtx, capture_pane_id, opts));
             }
             if let Ok(text) = rrx.recv_timeout(Duration::from_secs(5)) {
                 let _ = resp_tx.send(text);

@@ -3098,11 +3098,11 @@ pub enum CtrlReq {
     KillPaneById(usize),
     /// Capture a pane's plain text. Fields: resp, target pane id
     /// (`-t %N`, None = active pane), preserve trailing spaces (`-N`).
-    CapturePane(mpsc::Sender<String>, Option<usize>, bool),
+    CapturePane(mpsc::Sender<String>, Option<usize>, crate::copy_mode::CaptureOpts),
     /// Capture a pane's text with ANSI SGR sequences. Fields: resp,
     /// start (-S), end (-E), target pane id (`-t %N`, None = active pane),
     /// preserve trailing spaces (`-N`).
-    CapturePaneStyled(mpsc::Sender<String>, Option<i32>, Option<i32>, Option<usize>, bool),
+    CapturePaneStyled(mpsc::Sender<String>, Option<i32>, Option<i32>, Option<usize>, crate::copy_mode::CaptureOpts),
     FocusWindow(usize),
     /// Focus window by @N id lookup
     FocusWindowById(usize),
@@ -3167,7 +3167,7 @@ pub enum CtrlReq {
     /// Capture a plain-text row range. Fields: resp, start (-S), end (-E),
     /// target pane id (`-t %N`, None = active pane), preserve trailing
     /// spaces (`-N`).
-    CapturePaneRange(mpsc::Sender<String>, Option<i32>, Option<i32>, Option<usize>, bool),
+    CapturePaneRange(mpsc::Sender<String>, Option<i32>, Option<i32>, Option<usize>, crate::copy_mode::CaptureOpts),
     /// (client id, process id of the attaching client when the server could
     /// read it from the connection, issue #724).
     ClientAttach(u64, Option<u32>),
