@@ -5211,7 +5211,9 @@ fn run_main() -> io::Result<()> {
                         cmd.push_str(&format!(" -b {}", b));
                     }
                     cmd.push('\n');
-                    let content = send_control_with_response(cmd)?;
+                    let response = send_control_with_response(cmd)?;
+                    // The reply ends with the protocol's own newline, not the buffer's.
+                    let content = response.strip_suffix('\n').unwrap_or(&response);
                     if path == "-" {
                         print!("{}", content);
                     } else if append {
