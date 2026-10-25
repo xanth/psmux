@@ -54,6 +54,12 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 pub fn normalize(path: &str) -> String {
     let raw = std::path::Path::new(path);
     let abs = std::path::absolute(raw).unwrap_or_else(|_| raw.to_path_buf());
+    // An 8.3 spelling and the long one name one file; the directory exists
+    // even when the socket path itself does not.
+    let abs = match (abs.parent(), abs.file_name()) {
+        (Some(dir), Some(name)) => std::fs::canonicalize(dir).map(|dir| dir.join(name)).unwrap_or(abs),
+        _ => abs,
+    };
     let mut s = abs.to_string_lossy().replace('/', "\\");
     if let Some(rest) = s.strip_prefix("\\\\?\\") {
         s = rest.to_string();
