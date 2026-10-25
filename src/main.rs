@@ -6135,7 +6135,13 @@ fn run_control_mode(mode: u8) -> io::Result<()> {
     let psmux_dir = crate::paths::psmux_dir();
     let _ = std::fs::create_dir_all(&psmux_dir);
     let cc_log_path = crate::paths::psmux_dir_file("cc_debug.log");
-    let mut log_file = std::fs::File::create(&cc_log_path).ok();
+    // The log holds every byte a control client relays, typed input included,
+    // so it is written only on request.
+    let mut log_file = if env::var_os("PSMUX_CC_DEBUG").is_some() {
+        std::fs::File::create(&cc_log_path).ok()
+    } else {
+        None
+    };
     macro_rules! cclog {
         ($($arg:tt)*) => {
             if let Some(ref mut f) = log_file {
@@ -6299,7 +6305,7 @@ fn run_control_mode(mode: u8) -> io::Result<()> {
 
     // Spawn a thread to read server responses/notifications and print to stdout
     let reader_stream = reader.get_ref().try_clone()?;
-    let cc_log_path = Some(cc_log_path);
+    let cc_log_path = log_file.is_some().then_some(cc_log_path);
     let cc_log_out = cc_log_path.clone();
     // Set once stdin has ended: from then on the main thread owns the exit
     // (it drains the reader and prints %exit itself).
