@@ -2468,6 +2468,8 @@ fn named_key(name: &str) -> Option<KeyCode> {
 
 pub fn parse_key_name(name: &str) -> Option<(KeyCode, KeyModifiers)> {
     let name = name.trim();
+    // tmux's "None": a key no keyboard sends, so the prefix never fires.
+    if name.eq_ignore_ascii_case("none") { return Some((KeyCode::Null, KeyModifiers::NONE)); }
     // Strip surrounding quotes (single or double) — plugins often quote special chars
     // e.g., bind-key '|' split-window -h
     let name = if (name.starts_with('\'') && name.ends_with('\'') && name.len() >= 2)
@@ -2769,6 +2771,7 @@ pub fn source_file(app: &mut AppState, path: &str) {
 /// Parse a key string like "C-a", "M-x", "F1", "Space" into (KeyCode, KeyModifiers)
 pub fn parse_key_string(key: &str) -> Option<(KeyCode, KeyModifiers)> {
     let key = key.trim();
+    if key.eq_ignore_ascii_case("none") { return Some((KeyCode::Null, KeyModifiers::NONE)); }
     let mut mods = KeyModifiers::empty();
     let mut key_part = key;
     
@@ -2877,6 +2880,7 @@ pub fn format_key_binding(key: &(KeyCode, KeyModifiers)) -> String {
         KeyCode::Insert => "IC".to_string(),
         KeyCode::Delete => "DC".to_string(),
         KeyCode::F(n) => format!("F{}", n),
+        KeyCode::Null => "None".to_string(),
         _ => "?".to_string(),
     };
     
