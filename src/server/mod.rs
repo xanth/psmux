@@ -2168,6 +2168,10 @@ pub fn run_server(session_name: String, socket_name: Option<String>, initial_com
     }
 
     ensure_session_registry_files(&app);
+    // A standby holds the `-S` path once it is claimed.
+    if !app.is_warm_server() {
+        crate::socket_path::hold_socket_marker(app.socket_name.as_deref());
+    }
 
     // TEST-ONLY fault injection — compiled out of release builds entirely.
     // Simulates the server dying AFTER writing its .port file but WITHOUT the
@@ -5070,6 +5074,7 @@ pub fn run_server(session_name: String, socket_name: Option<String>, initial_com
                         let _ = std::fs::write(&new_path, port.to_string());
                     }
                     app.session_name = name;
+                    crate::socket_path::hold_socket_marker(app.socket_name.as_deref());
                     // It has a session now, so formats run from here on see it.
                     crate::format::set_sessionless(false);
                     // Move the guard from `__warm__` onto the claimed name (#505).

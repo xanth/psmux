@@ -107,3 +107,17 @@ fn tmux_env_first_field() {
     let p = r"C:\Temp\probe.sock";
     assert_eq!(tmux_env_path_for(Some(&hashed_namespace(p)), 7, Some(p)), p);
 }
+
+#[cfg(windows)]
+#[test]
+fn the_socket_marker_lives_while_its_holder_does() {
+    let dir = std::env::temp_dir().join(format!("psmux_730_marker_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("tmux.sock");
+    let path = path.to_str().unwrap();
+    let marker = open_socket_marker(path).expect("marker opens");
+    assert!(std::path::Path::new(path).exists());
+    drop(marker);
+    assert!(!std::path::Path::new(path).exists());
+    let _ = std::fs::remove_dir(&dir);
+}

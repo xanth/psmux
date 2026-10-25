@@ -177,6 +177,39 @@ pub fn server_tmux_env_path(ns: Option<&str>) -> String {
     tmux_env_path_for(ns, std::process::id(), server_recorded_path(ns))
 }
 
+/// A file at `path` that Windows deletes when the process holding it exits,
+/// however it exits. With two servers on one path it goes with the first.
+pub fn open_socket_marker(path: &str) -> Option<std::fs::File> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const GENERIC_WRITE_AND_DELETE: u32 = 0x4000_0000 | 0x0001_0000;
+        const SHARE_READ_WRITE_DELETE: u32 = 0x7;
+        const FILE_FLAG_DELETE_ON_CLOSE: u32 = 0x0400_0000;
+        std::fs::OpenOptions::new()
+            .access_mode(GENERIC_WRITE_AND_DELETE)
+            .share_mode(SHARE_READ_WRITE_DELETE)
+            .custom_flags(FILE_FLAG_DELETE_ON_CLOSE)
+            .create(true)
+            .write(true)
+            .open(path)
+            .ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        None
+    }
+}
+
+static SOCKET_MARKER: OnceLock<Option<std::fs::File>> = OnceLock::new();
+
+/// Keep a file at this server's `-S` path while it runs, as tmux keeps its
+/// socket there, so a caller can test the path for a live server.
+pub fn hold_socket_marker(ns: Option<&str>) {
+    SOCKET_MARKER.get_or_init(|| server_recorded_path(ns).and_then(open_socket_marker));
+}
+
 static CLI_SOCKET_PATH: OnceLock<String> = OnceLock::new();
 
 /// Record the `-S` path this client was given, for its error messages.
