@@ -244,3 +244,23 @@ fn the_reply_keeps_output_and_collects_errors() {
     );
     assert_eq!(command_list_reply(""), (String::new(), vec![]));
 }
+
+#[test]
+fn options_before_new_session_run_as_start_server_queue() {
+    let list = vec![
+        v(&["set-option", "-g", "history-limit", "10000"]),
+        v(&["new-session", "-d", "-s", "main", "--", "cmd.exe", "/c", "echo a;"]),
+        v(&["set-hook", "-w", "pane-died", "detach-client -a"]),
+    ];
+    let queue = start_server_queue(&list).expect("a list that makes a session");
+    assert_eq!(queue[0], "start-server");
+    let read_back = split_command_queue(&queue[1..]);
+    assert!(read_back[0].is_empty());
+    assert_eq!(read_back[1..].to_vec(), list);
+}
+
+#[test]
+fn a_list_without_new_session_or_led_by_one_is_not_rewritten() {
+    assert_eq!(start_server_queue(&[v(&["set-option", "-g", "@a", "1"]), v(&["set-option", "-g", "@b", "2"])]), None);
+    assert_eq!(start_server_queue(&[v(&["new-session", "-d"]), v(&["set-option", "-g", "@b", "2"])]), None);
+}

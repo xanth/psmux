@@ -661,6 +661,23 @@ pub fn split_cli_command_list<S: AsRef<str>>(
     Some((first, queued))
 }
 
+/// A list whose first command runs on an existing server but which makes a
+/// session later (`set -g ... \; new-session`), as one `start-server` argv
+/// with the list queued behind it. Arguments ending in `;` stay data.
+pub fn start_server_queue(commands: &[Vec<String>]) -> Option<Vec<String>> {
+    let first = commands.first()?.first()?;
+    let makes_session = commands.iter().any(|c| matches!(c.first().map(String::as_str), Some("new-session" | "new")));
+    if command_list_runs_alone(first) || !makes_session {
+        return None;
+    }
+    let mut queue = vec!["start-server".to_string()];
+    for command in commands {
+        queue.push(";".to_string());
+        queue.extend(command.iter().map(|a| a.strip_suffix(';').map_or_else(|| a.clone(), |s| format!("{}\\;", s))));
+    }
+    Some(queue)
+}
+
 /// The one line a CLI command list goes to the server as: each command's
 /// arguments quoted where the server's tokenizer needs it (the same
 /// [`crate::util::quote_arg_if_needed`] rule the CLI arms use, so a value such

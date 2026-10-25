@@ -1248,6 +1248,19 @@ fn run_main() -> io::Result<()> {
         env::set_var("PSMUX_CONFIG_FILE", cf);
     }
 
+    // tmux starts the server for a list that makes a session (client.c
+    // CLIENT_STARTSERVER), so `set -g ... \; new-session` sets the options on
+    // the server the session is made in. With no session in the namespace,
+    // start-server's queue (#734) does exactly that.
+    if let Some(list) = &command_list {
+        let dir = std::path::PathBuf::from(crate::paths::psmux_dir());
+        if let Some(queue) = crate::cli::start_server_queue(&list.commands) {
+            if crate::session::resolve_last_session_name_ns_in(&dir, l_socket_name.as_deref()).is_none() {
+                std::process::exit(run_list_command_alone(list, &queue));
+            }
+        }
+    }
+
     // Parse -t flag early to set target session for all commands
     // Supports session:window.pane format (e.g., "dev:0.1")
     // PSMUX_TARGET_SESSION stores the port file base name (for port file lookup)
