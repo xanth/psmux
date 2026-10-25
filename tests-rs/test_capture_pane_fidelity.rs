@@ -346,4 +346,5 @@ fn a_kept_dead_pane_shows_tmuxs_footer_on_its_bottom_line() {
     let bottom = capture_row_text(parser.screen(), ROWS - 1, 0..80);
     assert!(bottom.starts_with("Pane is dead (status 0, "), "{bottom:?}");
     assert_eq!(capture_row_text(parser.screen(), ROWS - 2, 0..80).trim_end(), "");
+    assert!(parser.screen().row_wrapped(ROWS - 2), "-J joins the line above into the footer, as in tmux");
 }

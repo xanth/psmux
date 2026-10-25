@@ -370,12 +370,16 @@ pub fn resize_window_panes(app: &mut AppState, window_index: usize, area: Rect) 
                     let (inner_height, inner_width) = pane_inner_size(*rect, border_rows);
 
                     if pane.last_rows != inner_height || pane.last_cols != inner_width {
-                        let _ = pane.master.resize(portable_pty::PtySize {
-                            rows: inner_height,
-                            cols: inner_width,
-                            pixel_width: 0,
-                            pixel_height: 0
-                        });
+                        // A dead pane's console would only repaint the
+                        // program's last screen over the one kept here.
+                        if !pane.dead {
+                            let _ = pane.master.resize(portable_pty::PtySize {
+                                rows: inner_height,
+                                cols: inner_width,
+                                pixel_width: 0,
+                                pixel_height: 0
+                            });
+                        }
                         // Both screens: the visible one (a copy-mode snapshot
                         // while copy mode is up) and the live one behind it.
                         for term in pane.each_term() {
@@ -594,12 +598,14 @@ pub fn prune_exited(n: Node, remain_on_exit: bool, kill_descendants: bool) -> (O
                         p.dead = true;
                         p.dead_status = Some(status.exit_code());
                         // tmux's remain-on-exit-format default, on a new
-                        // bottom line (server-fn.c server_destroy_pane).
+                        // bottom line that the line above wraps into
+                        // (server-fn.c server_destroy_pane).
                         if let Ok(mut parser) = p.live_parser().lock() {
                             let rows = parser.screen().size().0;
+                            parser.process(format!("\x1b[0m\x1b[r\x1b[{};1H", rows).as_bytes());
+                            parser.screen_mut().set_row_wrapped(rows.saturating_sub(1), true);
                             let when = chrono::Local::now().format("%a %b %e %H:%M:%S %Y");
-                            let footer = format!("\x1b[0m\x1b[r\x1b[{};1H\nPane is dead (status {}, {})", rows, status.exit_code(), when);
-                            parser.process(footer.as_bytes());
+                            parser.process(format!("\nPane is dead (status {}, {})", status.exit_code(), when).as_bytes());
                         }
                         (Some(Node::Leaf(p)), 1)
                     } else {

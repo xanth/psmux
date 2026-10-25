@@ -810,6 +810,13 @@ impl Screen {
             .is_some_and(crate::row::Row::wrapped)
     }
 
+    /// Sets whether the text in drawing row `row` wraps to the next line.
+    pub fn set_row_wrapped(&mut self, row: u16, wrapped: bool) {
+        if let Some(r) = self.grid_mut().drawing_row_mut(row) {
+            r.wrap(wrapped);
+        }
+    }
+
     /// Returns whether the alternate screen is currently in use.
     ///
     /// Gated on `allow_alternate_screen` (#88): when the option is off,
