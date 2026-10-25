@@ -209,6 +209,8 @@ pub struct Pane {
     pub last_infer_title: Instant,
     /// True when the child process has exited but remain-on-exit keeps the pane visible.
     pub dead: bool,
+    /// Exit code of the pane's process once `dead` is set (`#{pane_dead_status}`).
+    pub dead_status: Option<u32>,
     /// Timestamp of the last printable keystroke routed via the INTERACTIVE
     /// text-input route (`handle_key -> forward_key_to_active`); `None` until
     /// the first one. NOT updated by the injected route (`send-keys` /

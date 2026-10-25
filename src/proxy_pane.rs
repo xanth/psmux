@@ -274,7 +274,7 @@ pub fn create_proxy_pane(
         data_version: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         last_title_check: epoch,
         last_infer_title: epoch,
-        dead: false,
+        dead: false, dead_status: None,
         last_text_input: None,
         last_special_key: None,
         vt_bridge_cache: None,

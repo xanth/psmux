@@ -3653,8 +3653,13 @@ fn run_main() -> io::Result<()> {
                         // Anything else (a plain timeout against a live server that
                         // was merely slow to accept) exits 1 without touching the
                         // registry: has-session is a predicate, not a reaper (#622).
+                        if !refused && crate::session::registry_pid_anchor_alive(&target) != Some(false) {
+                            std::process::exit(1);
+                        }
                     }
                 }
+                // tmux names the reason, so callers can tell gone from busy.
+                eprintln!("psmux: can't find session: {}", crate::session::display_session_name(l_socket_name.as_deref(), &target));
                 std::process::exit(1);
             }
             // rename-session - Rename a session

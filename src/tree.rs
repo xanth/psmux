@@ -592,6 +592,7 @@ pub fn prune_exited(n: Node, remain_on_exit: bool, kill_descendants: bool) -> (O
                     );
                     if keep {
                         p.dead = true;
+                        p.dead_status = Some(status.exit_code());
                         (Some(Node::Leaf(p)), 1)
                     } else {
                         // Shell exited on its own: sweep any orphaned descendants

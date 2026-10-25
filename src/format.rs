@@ -2044,7 +2044,10 @@ fn expand_var_inner(var: &str, app: &AppState, win_idx: usize) -> String {
                 if p.dead { "1".into() } else { "0".into() }
             } else { "0".into() }
         }
-        "pane_dead_signal" | "pane_dead_status" | "pane_dead_time" => "0".into(),
+        // tmux leaves both empty while the pane lives; Windows has no signals.
+        "pane_dead_status" => target_pane().and_then(|p| p.dead_status).map(|c| c.to_string()).unwrap_or_default(),
+        "pane_dead_signal" => String::new(),
+        "pane_dead_time" => "0".into(),
         "pane_format" => "1".into(),
         // select-pane -d / -e (tmux format.c format_cb_pane_input_off:
         // `wp->flags & PANE_INPUTOFF`).
